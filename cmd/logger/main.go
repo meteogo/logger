@@ -11,6 +11,9 @@ import (
 func main() {
 	logger.InitLogger(logger.EnvTypeLocal, slog.LevelDebug)
 
-	ctx := logger.WithRequestID(context.Background(), uuid.New())
-	logger.Info(ctx, "some test message", slog.String("key", "value"))
+	ctx := context.Background()
+	ctx = logger.WithRequestID(ctx, uuid.New())
+	ctx = logger.WithEnvType(ctx, logger.EnvTypeLocal)
+
+	logger.Error(ctx, "user is authenticated", slog.String("userID", uuid.NewString()))
 }

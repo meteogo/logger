@@ -26,6 +26,10 @@ func (h *contextHandler) Handle(ctx context.Context, r slog.Record) error {
 		r.AddAttrs(slog.String(string(contextKeyRequestID), reqID.String()))
 	}
 
+	if envType, ok := ctx.Value(contextKeyEnvType).(EnvType); ok {
+		r.AddAttrs(slog.String(string(contextKeyEnvType), string(envType)))
+	}
+
 	return h.handler.Handle(ctx, r)
 }
 

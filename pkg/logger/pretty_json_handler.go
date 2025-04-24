@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,16 +13,27 @@ import (
 )
 
 type prettyJSONHandler struct {
-	out       io.Writer
-	level     slog.Level
-	attrGroup []string
-	attrs     []slog.Attr
+	out           io.Writer
+	level         slog.Level
+	attrGroup     []string
+	attrs         []slog.Attr
+	keyColor      *color.Color
+	valueColor    *color.Color
+	levelColorMap map[slog.Level]*color.Color
 }
 
 func newPrettyJSONHandler(w io.Writer, level slog.Level) *prettyJSONHandler {
 	return &prettyJSONHandler{
-		out:   w,
-		level: level,
+		out:        w,
+		level:      level,
+		keyColor:   color.New(color.FgHiWhite),
+		valueColor: color.New(color.FgHiBlack),
+		levelColorMap: map[slog.Level]*color.Color{
+			slog.LevelDebug: color.New(color.FgMagenta),
+			slog.LevelInfo:  color.New(color.FgBlue),
+			slog.LevelWarn:  color.New(color.FgYellow),
+			slog.LevelError: color.New(color.FgRed),
+		},
 	}
 }
 
@@ -38,7 +50,6 @@ func (h *prettyJSONHandler) Handle(_ context.Context, r slog.Record) error {
 	for _, attr := range h.attrs {
 		logMap[attr.Key] = attr.Value.Any()
 	}
-
 	r.Attrs(func(attr slog.Attr) bool {
 		logMap[attr.Key] = attr.Value.Any()
 		return true
@@ -49,21 +60,42 @@ func (h *prettyJSONHandler) Handle(_ context.Context, r slog.Record) error {
 		return err
 	}
 
-	var colorFunc func(format string, a ...interface{}) string
-	switch r.Level {
-	case slog.LevelDebug:
-		colorFunc = color.New(color.FgCyan).SprintfFunc()
-	case slog.LevelInfo:
-		colorFunc = color.New(color.FgGreen).SprintfFunc()
-	case slog.LevelWarn:
-		colorFunc = color.New(color.FgYellow).SprintfFunc()
-	case slog.LevelError:
-		colorFunc = color.New(color.FgRed).SprintfFunc()
-	default:
-		colorFunc = fmt.Sprintf
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(jsonData, &parsed); err != nil {
+		return err
 	}
 
-	fmt.Fprintln(h.out, colorFunc("%s", jsonData))
+	var buf bytes.Buffer
+	buf.WriteString("{\n")
+
+	first := true
+	for k, v := range parsed {
+		if !first {
+			buf.WriteString(",\n")
+		}
+		first = false
+
+		buf.WriteString("  ")
+		buf.WriteString(h.keyColor.Sprintf(`"%s": `, k))
+
+		switch k {
+		case "level":
+			if colorFunc, ok := h.levelColorMap[r.Level]; ok {
+				buf.WriteString(colorFunc.Sprintf(`"%s"`, v))
+			} else {
+				buf.WriteString(h.valueColor.Sprintf(`"%s"`, v))
+			}
+		case "msg":
+			underlined := color.New(color.Underline).Add(color.FgWhite)
+			buf.WriteString(underlined.Sprintf(`"%s"`, v))
+		default:
+			valBytes, _ := json.Marshal(v)
+			buf.WriteString(h.valueColor.Sprint(string(valBytes)))
+		}
+	}
+	buf.WriteString("\n}")
+
+	fmt.Fprintln(h.out, buf.String())
 	return nil
 }
 
