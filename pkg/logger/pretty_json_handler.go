@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"time"
 
 	"github.com/fatih/color"
 )
@@ -43,10 +42,8 @@ func (h *prettyJSONHandler) Enabled(_ context.Context, level slog.Level) bool {
 
 func (h *prettyJSONHandler) Handle(_ context.Context, r slog.Record) error {
 	logMap := make(map[string]interface{})
-	logMap["time"] = r.Time.Format(time.RFC3339)
-	logMap["level"] = r.Level.String()
-	logMap["msg"] = r.Message
 
+	// Не добавляем time, level и msg в JSON, так как они выводятся в префиксе
 	for _, attr := range h.attrs {
 		logMap[attr.Key] = attr.Value.Any()
 	}
@@ -66,8 +63,20 @@ func (h *prettyJSONHandler) Handle(_ context.Context, r slog.Record) error {
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString("{\n")
+	// Форматируем префикс в формате [dd.mm.yyyyThh:mm:ss]~[LEVEL]: msg
+	dateStr := r.Time.Format("02.01.2006T15:04:05")
+	levelStr := r.Level.String()
+	msgStr := r.Message
+	levelColor, ok := h.levelColorMap[r.Level]
+	if !ok {
+		levelColor = h.valueColor
+	}
+	underlined := color.New(color.Underline).Add(color.FgWhite)
+	prefix := fmt.Sprintf("[%s]~[%s]: %s\n", underlined.Sprintf("%s", dateStr), levelColor.Sprintf("%s", levelStr), underlined.Sprintf("%s", msgStr))
+	buf.WriteString(prefix)
 
+	// Форматируем JSON
+	buf.WriteString("{\n")
 	first := true
 	for k, v := range parsed {
 		if !first {
@@ -78,20 +87,8 @@ func (h *prettyJSONHandler) Handle(_ context.Context, r slog.Record) error {
 		buf.WriteString("  ")
 		buf.WriteString(h.keyColor.Sprintf(`"%s": `, k))
 
-		switch k {
-		case "level":
-			if colorFunc, ok := h.levelColorMap[r.Level]; ok {
-				buf.WriteString(colorFunc.Sprintf(`"%s"`, v))
-			} else {
-				buf.WriteString(h.valueColor.Sprintf(`"%s"`, v))
-			}
-		case "msg":
-			underlined := color.New(color.Underline).Add(color.FgWhite)
-			buf.WriteString(underlined.Sprintf(`"%s"`, v))
-		default:
-			valBytes, _ := json.Marshal(v)
-			buf.WriteString(h.valueColor.Sprint(string(valBytes)))
-		}
+		valBytes, _ := json.Marshal(v)
+		buf.WriteString(h.valueColor.Sprint(string(valBytes)))
 	}
 	buf.WriteString("\n}")
 
