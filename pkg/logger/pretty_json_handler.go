@@ -42,8 +42,6 @@ func (h *prettyJSONHandler) Enabled(_ context.Context, level slog.Level) bool {
 
 func (h *prettyJSONHandler) Handle(_ context.Context, r slog.Record) error {
 	logMap := make(map[string]interface{})
-
-	// Не добавляем time, level и msg в JSON, так как они выводятся в префиксе
 	for _, attr := range h.attrs {
 		logMap[attr.Key] = attr.Value.Any()
 	}
@@ -63,7 +61,6 @@ func (h *prettyJSONHandler) Handle(_ context.Context, r slog.Record) error {
 	}
 
 	var buf bytes.Buffer
-	// Форматируем префикс в формате [dd.mm.yyyyThh:mm:ss]~[LEVEL]: msg
 	dateStr := r.Time.Format("02.01.2006T15:04:05")
 	levelStr := r.Level.String()
 	msgStr := r.Message
@@ -75,7 +72,11 @@ func (h *prettyJSONHandler) Handle(_ context.Context, r slog.Record) error {
 	prefix := fmt.Sprintf("[%s]~[%s]: %s\n", underlined.Sprintf("%s", dateStr), levelColor.Sprintf("%s", levelStr), underlined.Sprintf("%s", msgStr))
 	buf.WriteString(prefix)
 
-	// Форматируем JSON
+	if len(parsed) == 0 {
+		fmt.Fprint(h.out, buf.String())
+		return nil
+	}
+
 	buf.WriteString("{\n")
 	first := true
 	for k, v := range parsed {

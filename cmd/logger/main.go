@@ -17,4 +17,9 @@ func main() {
 
 	logger.Info(ctx, "user is authenticated", slog.String("userID", uuid.NewString()))
 	logger.Info(ctx, "user posting an image", slog.String("imageID", uuid.NewString()))
+
+	logger.Error(context.Background(), "some error text")
+	logger.Error(context.Background(), "some error text 2")
+
+	logger.Info(ctx, "user posting an image", slog.String("imageID", uuid.NewString()))
 }
